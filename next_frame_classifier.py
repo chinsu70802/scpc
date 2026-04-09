@@ -98,7 +98,7 @@ class NextFrameClassifier(nn.Module):
             out = torch.stack(t_preds, dim=-1)
             out = F.log_softmax(out, dim=-1)
             out = out[...,0] * mask
-            loss += -out.mean()
+            loss += -out.mean() #Unsupseg loss
         return loss
     
     def forward(self,mel, lengths):
