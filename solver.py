@@ -32,8 +32,8 @@ class Solver(LightningModule):
             "distance":   None
         })
         self.pr = defaultdict(lambda: {
-            "train": PrecisionRecallMetric(tolerance=2,mode='strict'),
-            "val":   PrecisionRecallMetric(tolerance=2,mode='strict'),
+            "train": PrecisionRecallMetric(tolerance=2,mode='strict'),                      # Set mode to 'strict' to get correct rvals (Correct in the sense where you don't overcount predicted boundaries as correct if it lies within the tolerance window of several groundtruth boundaries)
+            "val":   PrecisionRecallMetric(tolerance=2,mode='strict'),                      # If mode is 'lenient', then you overcount correctly predicted boundaries
             "test":  PrecisionRecallMetric(tolerance=2,mode='strict')
         })
         self.best_rval = defaultdict(lambda: {
@@ -136,7 +136,7 @@ class Solver(LightningModule):
                 p = d
                 #p = replicate_first_k_frames(p, k=t, dim=1)
                 positives += p
-                #positives = 1 - max_min_norm(positives)
+                #positives = 1 - max_min_norm(positives)                                            # We don't need this as inputs are already dissimilarity scores
                 self.pr[f'cpc_{t}'][mode].update(seg, positives, length)
 
         loss_key = "loss" if mode == "train" else f"{mode}_loss"

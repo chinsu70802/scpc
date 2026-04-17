@@ -36,9 +36,14 @@ class NextFrameClassifier(nn.Module):
             nn.Conv1d(Z_DIM, Z_DIM, kernel_size=5, padding=2),
             nn.ReLU()
         )
-        self.upsampler = nn.Sequential(                                                                 # A transposed convolution used to upsample the segment representations back to log-mel timescale for reconstruction of the input
-            nn.TransposeConv1d()
-        )
+        self.mel_space =  nn.GRU(                                                                       # A GRU (to mirror the encoder) used to project the segment representations back to log-mel timescale for reconstruction of the input
+            input_size=Z_DIM,
+            hidden_size=80,
+            num_layers=1,          
+            batch_first=True,
+            bidirectional=False
+        )                                                                                               
+
         self.pred_steps = list(range(1 + self.hp.pred_offset, 1 + self.hp.pred_offset + self.hp.pred_steps))
         print(f"prediction steps: {self.pred_steps}")
     
@@ -106,7 +111,7 @@ class NextFrameClassifier(nn.Module):
             out = torch.stack(t_preds, dim=-1)
             out = F.log_softmax(out, dim=-1)
             out = out[...,0] * mask
-            loss += -out.mean() #Unsupseg loss
+            loss += -out.mean()
         return loss
     
     def forward(self,mel, lengths):
@@ -134,7 +139,7 @@ class NextFrameClassifier(nn.Module):
         seg_rep, durations, V, W_int = self.get_seg_rep(latent_vec, pred_boundaries, mask)
         seg_rep = self.seg_enc(seg_rep)
         frame_level_rep = self.upsample(seg_rep, durations)
-        reconstructed_mel = self.temporal_autoencoder(frame_level_rep)
+        reconstructed_mel = self.mel_space(frame_level_rep)
         return reconstructed_mel, frame_level_rep, seg_rep, durations, latent_vec, pred_boundaries, mask, d ,V, W_int, preds
     
     def loss(self, mask, input_mel, reconstructed_mel, preds):
