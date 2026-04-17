@@ -52,7 +52,6 @@ class Solver(LightningModule):
         self.build_model()
 
     def prepare_data(self):
-        # setup training set
         if "timit" in self.hp.data or "buckeye_1" in self.hp.data:
             train, val, test = TrainTestDataset.get_datasets(path=self.hp.timit_path)
         elif "buckeye" in self.hp.data:
@@ -115,7 +114,6 @@ class Solver(LightningModule):
     def forward(self, data_batch, batch_i, mode):
         loss = 0
 
-        # TRAIN
         log_mel, seg, phonemes, length, fname = data_batch
         reconstructed_mel, frame_level_rep, seg_rep, durations, latent_vec, pred_boundaries, mask, d, V, W_int, preds = self.NFC(log_mel, length)
         #NFC_loss = self.NFC.loss(preds, length)
@@ -132,7 +130,6 @@ class Solver(LightningModule):
         self.stats['nce_loss'][mode].update(nce_loss.item())
         loss += NFC_loss
 
-        # INFERENCE
         if mode == "test" or (mode == "val" and self.hp.early_stop_metric == "val_max_rval"):
             positives = 0
             for t in self.NFC.pred_steps:
@@ -180,9 +177,6 @@ class Solver(LightningModule):
                         prominence=self.peak_detection_params[pred_type]["prominence"],
                         distance=self.peak_detection_params[pred_type]["distance"],
                     )
-                #
-                # test has only one epoch so set it as best
-                # this is to get the overall best pred_type later
                 self.best_rval[pred_type][mode] = rval, self.current_epoch
             metrics[f'{data}_{mode}_{pred_type}_f1'] = f1
             metrics[f'{data}_{mode}_{pred_type}_precision'] = precision
@@ -191,7 +185,6 @@ class Solver(LightningModule):
             metrics[f"{data}_{mode}_{pred_type}_max_rval"] = self.best_rval[pred_type][mode][0]
             metrics[f"{data}_{mode}_{pred_type}_max_rval_epoch"] = self.best_rval[pred_type][mode][1]
 
-        # get best rval from all rval types and all epochs
         best_overall_rval = -float("inf")
         for pred_type, rval in self.best_rval.items():
             if rval[mode][0] > best_overall_rval:

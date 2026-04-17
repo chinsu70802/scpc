@@ -26,12 +26,6 @@ mel_transform = torchaudio.transforms.MelSpectrogram(
 )
 
 def collate_fn_pad(batch):
-    """collate_fn_padd
-    Pads batch of variable length
-
-    :param batch:
-    """
-    # get sequence lengths
     spects = [t[0] for t in batch]
     segs = [t[1] for t in batch]
     labels = [t[2] for t in batch]
@@ -45,7 +39,6 @@ def collate_fn_pad(batch):
 
 
 def mfcc_size(wav_len, sr=16000, hop_length=160):
-    """Calculate MFCC sequence length for 30ms window, 10ms shift"""
     return (wav_len - 1) // hop_length + 1
 
 def get_subset(dataset, percent):
@@ -67,22 +60,18 @@ class WavPhnDataset(Dataset):
     def process_file(self, wav_path):
         phn_path = wav_path.replace("wav", "phn")
 
-        # load audio
         audio, sr = torchaudio.load(wav_path)
         audio = audio[0]
         mel_spect = mel_transform(audio).squeeze(0)
         log_mel = torch.log(mel_spect + 1e-8).transpose(0,1)
-        log_mel = (log_mel - log_mel.mean(dim=0, keepdim=True)) / (log_mel.std(dim=0, keepdim=True) + 1e-6)
+        # log_mel = (log_mel - log_mel.mean(dim=0, keepdim=True)) / (log_mel.std(dim=0, keepdim=True) + 1e-6)                       #Do not normalize log-mel as it smoothens out the transitions, making it hard to detect boundaries
 
-        # load labels -- segmentation and phonemes
         with open(phn_path, "r") as f:
             lines = f.readlines()
             lines = list(map(lambda line: line.split(" "), lines))
 
-            # get segment times
-            times = torch.FloatTensor(list(map(lambda line: int(int(line[1]) / 160), lines)))[:-1]  # don't count end time as boundary
+            times = torch.FloatTensor(list(map(lambda line: int(int(line[1]) / 160), lines)))[:-1]
 
-            # get phonemes in each segment (for K times there should be K+1 phonemes)
             phonemes = list(map(lambda line: line[2].strip(), lines))
 
         return log_mel, times.tolist(), phonemes, wav_path
@@ -141,8 +130,7 @@ class LibriSpeechDataset(LIBRISPEECH):
     def __getitem__(self, idx):
         wav, sr, utt, spk_id, chp_id, utt_id = self.libri_dataset[idx]
         wav = wav[0]
-        # Fix: use mfcc_size instead of spectral_size
-        hop_length = int(0.010 * sr)  # 10ms shift
+        hop_length = int(0.010 * sr)
         return wav, None, None, mfcc_size(len(wav), sr, hop_length), None
 
     def __len__(self):
