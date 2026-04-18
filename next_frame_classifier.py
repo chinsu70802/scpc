@@ -62,12 +62,13 @@ class NextFrameClassifier(nn.Module):
         d = d.masked_fill(~d_mask, 0)                                                                   # Filling the padded regime of dissimilarities with 0s
         zeros_col = torch.zeros(d.size(0), 1, device=latent_vec.device)                                 # Concatenation of a column of zeros to the left of a batch of dissimilarities 
         d = torch.cat([zeros_col, d], dim=1)                                                            # This is done to facilitate the computation of difference between d_t and d_(t - 1) [The left tensor need not include scores starting from timestep T (the last unpadded frame) as difference will be between 0 (first padded score) and d_T]
-        left = torch.cat([zeros_col, d[:, :-1]], dim=1).masked_fill(~mask, 0)                           """ For convenience, think of d as [ 0   d_1 d_2 d_3 ... d_t     0   0 0...] which has T timesteps in total (including padding), 
-                                                                                                                                left as    [ 0    0  d_1 d_2 ... d_(t-1) d_t 0 0...] which also has T timesteps
-                                                                                                                                right as   [ d_1 d_2 d_3 d_4 ... 0       0   0 0...] which also has T timesteps
-                                                                                                                                left_2 as  [ 0    0   0  d_1 ... d_(t-2) ... 0 0...] which has T timesteps
-                                                                                                                                right_2 as [ d_2 d_3 d_4 d_5 ... 0       0...0 0...] which has T timesteps
-                                                                                                        """
+        left = torch.cat([zeros_col, d[:, :-1]], dim=1).masked_fill(~mask, 0)                          
+        """                                                                                             For convenience, think of d as [ 0   d_1 d_2 d_3 ... d_t     0   0 0...] which has T timesteps in total (including padding), 
+                                                                                                                            left as    [ 0    0  d_1 d_2 ... d_(t-1) d_t 0 0...] which also has T timesteps
+                                                                                                                            right as   [ d_1 d_2 d_3 d_4 ... 0       0   0 0...] which also has T timesteps
+                                                                                                                            left_2 as  [ 0    0   0  d_1 ... d_(t-2) ... 0 0...] which has T timesteps
+                                                                                                                            right_2 as [ d_2 d_3 d_4 d_5 ... 0       0...0 0...] which has T timesteps
+        """
         right = torch.cat([d[:, 1:], zeros_col], dim=1)                                                 # The same is done for obtaining the difference between d_t and d_(t + 1) [namely concatenating a column of zeros to the right of a batch of dissimilarity scores]
         right[:, 0] = 0.0                                                                               # This is done ignore -d_1 that appears in the first timestep for all batches
         zero = torch.tensor(0.0, device=latent_vec.device)                                              
