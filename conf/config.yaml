@@ -5,7 +5,7 @@ hydra:
 # DATA
 # libri_path: /data/felix/datasets/librispeech
 # buckeye_path: /data/felix/datasets/buckeye_processed_by_speaker_balanced
-timit_path: /home/sunil/ph_sg/timit_dp #/home/sunil/ph_sg/timit_dp 
+timit_path: /home/sunil/nani/sup_pred/timit_dp #/home/sunil/ph_sg/timit_dp 
 # telugu_path: /home/sunil/nani/sup_pred/telugu_dp
 # libri_subset: train-clean-100
 # libri_percent: 1.0
@@ -31,8 +31,8 @@ n_negatives: 1  # number of negative samples for contrastive loss
 
 # MISC
 gpus: 1 
-tag: scpc_2
-exp_name: scpc_2
+tag: gru_scpc_reduced_timit
+exp_name: gru_scpc_reduced_timit
 project: supervised_word_segmentor
 ckpt: null
 dev_run: false  # fast debug run

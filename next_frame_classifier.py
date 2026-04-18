@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import hydra
 from utils import LambdaLayer, PrintShapeLayer, length_to_mask
-from dataloader import TrainTestDataset                                                                 # Notations: Dissimilarity at timestep t is represented as d_t
+from dataloader import TrainTestDataset                                                                 # Notations: Dissimilarity at timestep t (between d_t and d_(t + 1)) is represented as d_t
 from collections import defaultdict
 import torchaudio.transforms 
 torch.set_printoptions(threshold=float('inf'))
@@ -36,13 +36,13 @@ class NextFrameClassifier(nn.Module):
             nn.Conv1d(Z_DIM, Z_DIM, kernel_size=5, padding=2),
             nn.ReLU()
         )
-        self.mel_space =  nn.GRU(                                                                       # A GRU (to mirror the encoder) used to project the segment representations back to log-mel timescale for reconstruction of the input
+        self.mel_space =  nn.GRU(                                                                       # A GRU (to mirror the encoder) used to project the segment representations back to log-mel timescale for reconstruction of the input. The intuition is to give the emulated frame level representations some variation within a segment (the onset, nucleus and coda)
             input_size=Z_DIM,
             hidden_size=80,
             num_layers=1,          
             batch_first=True,
             bidirectional=False
-        )                                                                                               
+        )                                                                                              
 
         self.pred_steps = list(range(1 + self.hp.pred_offset, 1 + self.hp.pred_offset + self.hp.pred_steps))
         print(f"prediction steps: {self.pred_steps}")
@@ -60,22 +60,22 @@ class NextFrameClassifier(nn.Module):
         sim_max = sim_max_masked.max(dim=1, keepdim=True).values
         d = 1 - ((sim - sim_min) / (sim_max - sim_min + 1e-6))                                          # Computation of dissimilarity as 1 - normalized_similarity
         d = d.masked_fill(~d_mask, 0)                                                                   # Filling the padded regime of dissimilarities with 0s
-        zeros_col = torch.zeros(d.size(0), 1, device=latent_vec.device)                                 # Concatenation of a column of zeros to the left of a batch of dissimilarities 
-        d = torch.cat([zeros_col, d], dim=1)                                                            # This is done to facilitate the computation of difference between d_t and d_(t - 1) [The left tensor need not include scores starting from timestep T (the last unpadded frame) as difference will be between 0 (first padded score) and d_T]
-        left = torch.cat([zeros_col, d[:, :-1]], dim=1).masked_fill(~mask, 0)                          
-        """                                                                                             For convenience, think of d as [ 0   d_1 d_2 d_3 ... d_t     0   0 0...] which has T timesteps in total (including padding), 
-                                                                                                                            left as    [ 0    0  d_1 d_2 ... d_(t-1) d_t 0 0...] which also has T timesteps
-                                                                                                                            right as   [ d_1 d_2 d_3 d_4 ... 0       0   0 0...] which also has T timesteps
-                                                                                                                            left_2 as  [ 0    0   0  d_1 ... d_(t-2) ... 0 0...] which has T timesteps
-                                                                                                                            right_2 as [ d_2 d_3 d_4 d_5 ... 0       0...0 0...] which has T timesteps
+        zeros_col = torch.zeros(d.size(0), 1, dtype=torch.int32, device=latent_vec.device)              # Concatenation of a column of zeros to the right of a batch of dissimilarities 
+        zeros_mask = torch.zeros(d.size(0), 1, dtype=torch.bool, device=latent_vec.device)
+        d_mask = torch.cat([d_mask, zeros_mask], dim = 1)
+        d = torch.cat([d, zeros_col], dim=1)                                                            # This is done to facilitate the computation of difference between d_t and d_(t - 1) [The left tensor need not include scores starting from timestep T (the last unpadded frame) as difference will be between 0 (first padded score) and d_T]
+        left = torch.cat([zeros_col, d[:, :-1]], dim=1).masked_fill(~d_mask, 0)                          
+        """                                                                                             For convenience, think of d as [ d_1 d_2 d_3 ... d_t     0   0 0...] which has T timesteps in total (including padding), 
+                                                                                                                            left as    [  0  d_1 d_2 ... d_(t-1) d_t 0 0...] which also has T timesteps
+                                                                                                                            right as   [ d_2 d_3 d_4 ... 0       0   0 0...] which also has T timesteps
+                                                                                                                            left_2 as  [ 0    0  d_1 ... d_(t-2) ... 0 0...] which has T timesteps
+                                                                                                                            right_2 as [ d_3 d_4 d_5 ... 0       0...0 0...] which has T timesteps
         """
         right = torch.cat([d[:, 1:], zeros_col], dim=1)                                                 # The same is done for obtaining the difference between d_t and d_(t + 1) [namely concatenating a column of zeros to the right of a batch of dissimilarity scores]
-        right[:, 0] = 0.0                                                                               # This is done ignore -d_1 that appears in the first timestep for all batches
         zero = torch.tensor(0.0, device=latent_vec.device)                                              
         p_1 = torch.minimum(torch.maximum(d - left, zero), torch.maximum(d - right, zero))              # Choosing the min of the first order dissimilarity difference to the left and right (d - d_(t-1) and d - d_(t+1)). If the min difference between the adjacent dissimilarities is small, then dissimilarity at time t may not be significant compared to one of its first order neighbors to be considered a peak (they will be at the same level when visualized)
-        left_2 = torch.cat([zeros_col, zeros_col, d[:, :-2]], dim=1).masked_fill(~mask, 0)              # Doing the same as above steps for second-order neighbors of dissimilarities
+        left_2 = torch.cat([zeros_col, zeros_col, d[:, :-2]], dim=1).masked_fill(~d_mask, 0)            # Doing the same as above steps for second-order neighbors of dissimilarities
         right_2 = torch.cat([d[:, 2:], zeros_col, zeros_col], dim=1)            
-        right_2[:, 0] = 0.0
         p_2 = torch.minimum(torch.maximum(d - left_2, zero), torch.maximum(d - right_2,  zero))         # Choosing the min of the second order dissimilarity difference to the left and right (d - d_(t-2) and d - d_(t+2)). Same intuition as in p_1.
         p = torch.minimum(torch.maximum(torch.maximum(p_1, p_2) - thres, zero), p_1)                    # We are choosing the max of min differences for the first-order and second-order case. p is the final list of decisions where values that are very high denotes a boundary event. Others are non-boundary events. If only p_1 was used to predict a boundary (by checking if the min difference of dissimilarities is more than a threshold), it may be a noisy boundary decision.
                                                                                                         # Now, we are consulting with p_2 as well. We take the max of p_1 and p_2 (max of min differences) and ask if that is atleast more than a threshold thres. If so, it is a phonetic boundary 
@@ -118,8 +118,8 @@ class NextFrameClassifier(nn.Module):
     def forward(self,mel, lengths):
         B,T,_ = mel.shape
         mask = torch.arange(T, device=mel.device).unsqueeze(0) < torch.tensor(lengths, device=mel.device).unsqueeze(1)
-        conv_out = self.conv(mel.transpose(1,2))
-        latent_vec = self.linear_proj(conv_out.transpose(1,2))
+        gru_out, _ = self.enc(mel)
+        latent_vec = self.linear_proj(gru_out)
         preds = defaultdict(list)
         for i, t in enumerate(self.pred_steps):  
             pos_pred = self.score(latent_vec[:, :-t], latent_vec[:, t:])  
@@ -136,11 +136,11 @@ class NextFrameClassifier(nn.Module):
                     batch_reorder = torch.arange(pos_pred.shape[0])
                 neg_pred = self.score(latent_vec[:, :-t], latent_vec[batch_reorder][: , time_reorder])  # This uses random permutation to choose negatives for any given anchor. The probability of choosing the anchor itself as negative is roughly 63%. On an average, you can expect one anchor to choose itself as negative. The impact of this needs to be studied.
                 preds[t].append(neg_pred)
-        pred_boundaries, d = self.diff_boundary_detector(latent_vec, mask)
-        seg_rep, durations, V, W_int = self.get_seg_rep(latent_vec, pred_boundaries, mask)
-        seg_rep = self.seg_enc(seg_rep)
-        frame_level_rep = self.upsample(seg_rep, durations)
-        reconstructed_mel = self.mel_space(frame_level_rep)
+        pred_boundaries, d = self.diff_boundary_detector(gru_out, mask)
+        seg_rep, durations, V, W_int = self.get_seg_rep(gru_out, pred_boundaries, mask)
+        seg_rep = self.seg_enc(seg_rep.transpose(1,2))
+        frame_level_rep = self.upsample(seg_rep.transpose(1,2), durations)
+        reconstructed_mel, _ = self.mel_space(frame_level_rep)
         return reconstructed_mel, frame_level_rep, seg_rep, durations, latent_vec, pred_boundaries, mask, d ,V, W_int, preds
     
     def loss(self, mask, input_mel, reconstructed_mel, preds):
