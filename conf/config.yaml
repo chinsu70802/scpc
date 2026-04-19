@@ -5,7 +5,7 @@ hydra:
 # DATA
 # libri_path: /data/felix/datasets/librispeech
 # buckeye_path: /data/felix/datasets/buckeye_processed_by_speaker_balanced
-timit_path: /home/sunil/nani/sup_pred/timit_dp #/home/sunil/ph_sg/timit_dp 
+timit_path: /home/sunil/nani/sup_pred/timit_dp #/home/sunil/nani/sup_pred/timit_dp #/home/sunil/nani/sup_pred/timit_dp  
 # telugu_path: /home/sunil/nani/sup_pred/telugu_dp
 # libri_subset: train-clean-100
 # libri_percent: 1.0
@@ -17,11 +17,9 @@ dataloader_n_workers: 10
 
 # MODEL
 cosine_coef: 1.0  # cosine similarity coefficient
-z_proj: 78  # size of projection
-boundary_embed_dim: 16  # size of boundary embedding
+z_proj: 64  # size of projection
 z_proj_linear: true
 z_proj_dropout: 0
-top_lstm_dim: 64  # hidden dimension of top LSTM
 z_dim: 256
 pred_steps: 1  # number of future prediction steps
 pred_offset: 0  # offset of future prediction steps
@@ -31,8 +29,8 @@ n_negatives: 1  # number of negative samples for contrastive loss
 
 # MISC
 gpus: 1 
-tag: gru_scpc_reduced_timit
-exp_name: gru_scpc_reduced_timit
+tag: gru_scpc_reduced_timit_linear_proj_lenient
+exp_name: gru_scpc_reduced_timit_linear_proj_lenient
 project: supervised_word_segmentor
 ckpt: null
 dev_run: false  # fast debug run

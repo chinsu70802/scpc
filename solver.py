@@ -32,9 +32,9 @@ class Solver(LightningModule):
             "distance":   None
         })
         self.pr = defaultdict(lambda: {
-            "train": PrecisionRecallMetric(tolerance=2,mode='strict'),                      # Set mode to 'strict' to get correct rvals (Correct in the sense where you don't overcount predicted boundaries as correct if it lies within the tolerance window of several groundtruth boundaries)
-            "val":   PrecisionRecallMetric(tolerance=2,mode='strict'),                      # If mode is 'lenient', then you overcount correctly predicted boundaries
-            "test":  PrecisionRecallMetric(tolerance=2,mode='strict')
+            "train": PrecisionRecallMetric(tolerance=2,mode='lenient'),                      # Set mode to 'strict' to get correct rvals (Correct in the sense where you don't overcount predicted boundaries as correct if it lies within the tolerance window of several groundtruth boundaries)
+            "val":   PrecisionRecallMetric(tolerance=2,mode='lenient'),                      # If mode is 'lenient', then you overcount boundaries
+            "test":  PrecisionRecallMetric(tolerance=2,mode='lenient')
         })
         self.best_rval = defaultdict(lambda: {
             "train": (0, 0),
@@ -109,6 +109,7 @@ class Solver(LightningModule):
     def build_model(self):
         print("MODEL:")
         self.NFC = NextFrameClassifier(self.hp)
+        wandb.watch(self.NFC, log="gradients", log_freq=50)
         line()
 
     def forward(self, data_batch, batch_i, mode):

@@ -33,8 +33,7 @@ class NextFrameClassifier(nn.Module):
             nn.Linear(256,64)
         )
         self.seg_enc = nn.Sequential(                                                                   # A convolutional encoder that converts average of frames within a segment to a segmental representation with pentaphone context
-            nn.Conv1d(Z_DIM, Z_DIM, kernel_size=5, padding=2),
-            nn.ReLU()
+            nn.Conv1d(Z_DIM, Z_DIM, kernel_size=5, padding=2)
         )
         self.mel_space =  nn.GRU(                                                                       # A GRU (to mirror the encoder) used to project the segment representations back to log-mel timescale for reconstruction of the input. The intuition is to give the emulated frame level representations some variation within a segment (the onset, nucleus and coda)
             input_size=Z_DIM,
@@ -42,7 +41,12 @@ class NextFrameClassifier(nn.Module):
             num_layers=1,          
             batch_first=True,
             bidirectional=False
-        )                                                                                              
+        )           
+
+        self.mel_out = nn.Sequential(
+            nn.Dropout(0.1),
+            nn.Linear(80,80)
+        )                                                                                   
 
         self.pred_steps = list(range(1 + self.hp.pred_offset, 1 + self.hp.pred_offset + self.hp.pred_steps))
         print(f"prediction steps: {self.pred_steps}")
@@ -141,6 +145,7 @@ class NextFrameClassifier(nn.Module):
         seg_rep = self.seg_enc(seg_rep.transpose(1,2))
         frame_level_rep = self.upsample(seg_rep.transpose(1,2), durations)
         reconstructed_mel, _ = self.mel_space(frame_level_rep)
+        reconstructed_mel = self.mel_out(reconstructed_mel)
         return reconstructed_mel, frame_level_rep, seg_rep, durations, latent_vec, pred_boundaries, mask, d ,V, W_int, preds
     
     def loss(self, mask, input_mel, reconstructed_mel, preds):
